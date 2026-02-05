@@ -1,7 +1,6 @@
 import random
 from typing import Dict, Any
 from data.items import Rarity
-
 ANIMALS: Dict[str, Dict[str, Any]] = {
     "dark_hydra": {
         "name": "Dark Hydra",
