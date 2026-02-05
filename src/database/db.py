@@ -98,34 +98,6 @@ class Database:
             ''')
             
             await conn.execute('''
-                CREATE TABLE IF NOT EXISTS battle_stats (
-                    user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
-                    wins INTEGER DEFAULT 0,
-                    losses INTEGER DEFAULT 0,
-                    monsters_killed INTEGER DEFAULT 0,
-                    total_damage_dealt BIGINT DEFAULT 0
-                )
-            ''')
-            
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS animals (
-                    id TEXT PRIMARY KEY,
-                    user_id BIGINT REFERENCES users(user_id),
-                    animal_id TEXT NOT NULL,
-                    nickname TEXT,
-                    level INTEGER DEFAULT 1,
-                    exp INTEGER DEFAULT 0,
-                    current_hp INTEGER,
-                    max_hp INTEGER,
-                    attack INTEGER,
-                    defense INTEGER,
-                    is_in_team BOOLEAN DEFAULT FALSE,
-                    team_slot INTEGER,
-                    captured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            await conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_animals_user ON animals(user_id)
             ''')
             
@@ -320,7 +292,7 @@ class Database:
                 'SELECT * FROM animals WHERE user_id = $1 ORDER BY captured_at DESC',
                 user_id
             )
-            return [dict(a) for a in animals]
+     [dict(a) for a in animals]
     
     async def get_animal(self, animal_uuid: str) -> Optional[Dict[str, Any]]:
         async with self.pool.acquire() as conn:
