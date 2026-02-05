@@ -9,9 +9,9 @@ from utils.emoji_utils import get_animal_emoji
 HUNT_COOLDOWN = 10
 
 class HuntCog(commands.Cog):
-def init(self, bot):
-self.bot = bot
-self.db = bot.db
+    def __init__(self, bot):
+        self.bot = bot
+        self.db = bot.db
 
 def get_bonuses(self, profile):  
     exp_bonus = 0  
