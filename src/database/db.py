@@ -8,23 +8,18 @@ import uuid
 class Database:
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None
-        
+
     async def init(self):
-    url = os.environ.get("DATABASE_URL")
+        url = os.environ.get("DATABASE_URL")
 
-    if not url:
-        raise RuntimeError("❌ DATABASE_URL NOT SET — cek Railway Variables")
+        if not url:
+            raise RuntimeError("❌ DATABASE_URL NOT SET — cek Railway Variables")
 
-    print("✅ DATABASE_URL detected")
+        print("✅ DATABASE_URL detected")
 
-    self.pool = await asyncpg.create_pool(
-        url,
-        min_size=1,
-        max_size=5,
-        command_timeout=60,
-        ssl="require"
-    )
-
+        self.pool = await asyncpg.create_pool(
+            url
+        )
     await self.create_tables()
     print("✅ Database connected")
         await self.create_tables()
