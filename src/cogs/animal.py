@@ -16,91 +16,93 @@ class AnimalCog(commands.Cog):
     animal_group = app_commands.Group(name="animal", description="Manage your animals")
     
     async def do_animal_list(self, user_id: int, username: str, page: int = 1):
-        await self.db.get_user(user_id, username)
-        
-        animals = await self.db.get_user_animals(user_id)
-        
-        if not animals:
-            embed = discord.Embed(
-                title="🐾 Koleksi Hewanmu",
-                description="Kamu belum punya hewan!\nGunakan `/hunt` atau `qhunt` untuk menangkap hewan pertamamu.",
-                color=discord.Color.orange()
-            )
-            return embed, 0, 0
-        
-        total_pages = math.ceil(len(animals) / ANIMALS_PER_PAGE)
-        page = max(1, min(page, total_pages))
-        
-        start_idx = (page - 1) * ANIMALS_PER_PAGE
-        end_idx = start_idx + ANIMALS_PER_PAGE
-        page_animals = animals[start_idx:end_idx]
-        
-        embed = discord.Embed(
-            title=f"🐾 Koleksi Hewan {username}",
-            description=f"Total: **{len(animals)}** hewan | Halaman **{page}/{total_pages}**",
-            color=discord.Color.blue()
-        )
-        
-        animal_list = ""
-for a in page_animals:
-    emoji = get_animal_emoji(a['animal_id'], a.get('costume'))
-    animal_data = get_animal_by_id(a['animal_id'])
-    rarity = animal_data['rarity'].display_name if animal_data else "Unknown"
-    rarity_code = animal_data['rarity'].short_code if animal_data else "?"
-    status = "⚔️ Tim" if a['is_in_team'] else "📦"
+    await self.db.get_user(user_id, username)
+    animals = await self.db.get_user_animals(user_id)
 
-    # Ringkas, tapi ada kode hewan
-    animal_list += f"{emoji} **{a['nickname']}** | Lv.{a['level']} | {rarity} ({rarity_code}) | 🆔 `{a['id']}` | {status}\n" 
-       
-        embed.add_field(name="📋 Daftar Hewan", value=animal_list if animal_list else "Kosong", inline=False)
-        
-        max_team = await self.db.get_max_team_size(user_id)
-        team_count = len([a for a in animals if a['is_in_team']])
-        embed.set_footer(text=f"Tim: {team_count}/{max_team} | /animal list <page> untuk halaman lain")
-        
-        return embed, page, total_pages
-    
-    @animal_group.command(name="list", description="View all your captured animals")
-    @app_commands.describe(page="Page number")
-    async def animal_list(self, interaction: discord.Interaction, page: int = 1):
-        embed, current_page, total_pages = await self.do_animal_list(
-            interaction.user.id, interaction.user.display_name, page
+    if not animals:
+        embed = discord.Embed(
+            title="🐾 Koleksi Hewanmu",
+            description="Kamu belum punya hewan!\nGunakan `/hunt` atau `qhunt` untuk menangkap hewan pertamamu.",
+            color=discord.Color.orange()
         )
-        
+        return embed, 0, 0
+
+    total_pages = math.ceil(len(animals) / ANIMALS_PER_PAGE)
+    page = max(1, min(page, total_pages))
+
+    start_idx = (page - 1) * ANIMALS_PER_PAGE
+    end_idx = start_idx + ANIMALS_PER_PAGE
+    page_animals = animals[start_idx:end_idx]
+
+    embed = discord.Embed(
+        title=f"🐾 Koleksi Hewan {username}",
+        description=f"Total: **{len(animals)}** hewan | Halaman **{page}/{total_pages}**",
+        color=discord.Color.blue()
+    )
+
+    animal_list = ""
+    for a in page_animals:
+        emoji = get_animal_emoji(a['animal_id'], a.get('costume'))
+        animal_data = get_animal_by_id(a['animal_id'])
+        if animal_data:
+            rarity = animal_data['rarity'].display_name
+            rarity_code = animal_data['rarity'].short_code
+            animal_name = animal_data['name']
+        else:
+            rarity = "Unknown"
+            rarity_code = "?"
+            animal_name = "Unknown"
+
+        status = "⚔️ Tim" if a['is_in_team'] else "📦"
+        animal_list += f"{emoji} **{a['nickname']}** ({animal_name}) | Lv.{a['level']} | {rarity} ({rarity_code}) | {status}\n"
+        animal_list += f"   🆔 `{a['id']}` | ❤️ {a['current_hp']}/{a['max_hp']} | ⚔️ {a['attack']} | 🛡️ {a['defense']}\n"
+
+    embed.add_field(
+        name="📋 Daftar Hewan",
+        value=animal_list if animal_list else "Kosong",
+        inline=False
+    )
+
+    max_team = await self.db.get_max_team_size(user_id)
+    team_count = len([a for a in animals if a['is_in_team']])
+    embed.set_footer(text=f"Tim: {team_count}/{max_team} | /animal list <page> untuk halaman lain")
+
+    return embed, page, total_pages
+
+
+@commands.command(name="animal")
+async def animal_prefix(self, ctx, subcommand: str = None, arg: str = None):
+    if subcommand is None or subcommand.lower() == "list":
+        page = 1
+        if arg and arg.isdigit():
+            page = int(arg)
+        embed, current_page, total_pages = await self.do_animal_list(
+            ctx.author.id, ctx.author.display_name, page
+        )
         if total_pages > 1:
-            view = AnimalListView(self, interaction.user.id, interaction.user.display_name, current_page, total_pages)
-            await interaction.response.send_message(embed=embed, view=view)
+            view = AnimalListView(self, ctx.author.id, ctx.author.display_name, current_page, total_pages)
+            await ctx.send(embed=embed, view=view)
         else:
-            await interaction.response.send_message(embed=embed)
-    
-    @commands.command(name="animal")
-    async def animal_prefix(self, ctx, subcommand: str = None, arg: str = None):
-        if subcommand is None or subcommand.lower() == "list":
-            page = 1
-            if arg and arg.isdigit():
-                page = int(arg)
-            embed, current_page, total_pages = await self.do_animal_list(
-                ctx.author.id, ctx.author.display_name, page
-            )
-            if total_pages > 1:
-                view = AnimalListView(self, ctx.author.id, ctx.author.display_name, current_page, total_pages)
-                await ctx.send(embed=embed, view=view)
-            else:
-                await ctx.send(embed=embed)
-        elif subcommand.lower() == "equip" and arg:
-            success, message = await self.do_animal_equip(ctx.author.id, arg)
-            await ctx.send(message)
-        elif subcommand.lower() == "unequip" and arg:
-            success, message = await self.do_animal_unequip(ctx.author.id, arg)
-            await ctx.send(message)
-        elif subcommand.lower() == "info" and arg:
-            embed = await self.do_animal_info(ctx.author.id, arg)
             await ctx.send(embed=embed)
-        elif subcommand.lower() == "heal":
-            embed = await self.do_animal_heal(ctx.author.id, ctx.author.name)
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("❌ Penggunaan: `qanimal list/equip/unequip/info/heal <id>`")
+
+    elif subcommand.lower() == "equip" and arg:
+        success, message = await self.do_animal_equip(ctx.author.id, arg)
+        await ctx.send(message)
+
+    elif subcommand.lower() == "unequip" and arg:
+        success, message = await self.do_animal_unequip(ctx.author.id, arg)
+        await ctx.send(message)
+
+    elif subcommand.lower() == "info" and arg:
+        embed = await self.do_animal_info(ctx.author.id, arg)
+        await ctx.send(embed=embed)
+
+    elif subcommand.lower() == "heal":
+        embed = await self.do_animal_heal(ctx.author.id, ctx.author.name)
+        await ctx.send(embed=embed)
+
+    else:
+        await ctx.send("❌ Penggunaan: `qanimal list/equip/unequip/info/heal <id>`")
     
     async def do_animal_equip(self, user_id: int, animal_id: str):
         animal = await self.db.get_animal(animal_id)
