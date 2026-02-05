@@ -15,7 +15,7 @@ class AnimalCog(commands.Cog):
     
     animal_group = app_commands.Group(name="animal", description="Manage your animals")
     
-    async def do_animal_list(self, user_id: int, username: str, page: int = 1):
+async def do_animal_list(self, user_id: int, username: str, page: int = 1):
     await self.db.get_user(user_id, username)
     animals = await self.db.get_user_animals(user_id)
 
