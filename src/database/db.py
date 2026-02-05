@@ -1,4 +1,4 @@
-import os
+ import os
 import asyncpg
 import json
 from datetime import datetime, timedelta
@@ -17,14 +17,12 @@ class Database:
 
         print("✅ DATABASE_URL detected")
 
-        self.pool = await asyncpg.create_pool(
-            url
-        )
-    await self.create_tables()
-    print("✅ Database connected")
+        self.pool = await asyncpg.create_pool(url)
+
+        # Panggil pembuatan tabel
         await self.create_tables()
-        print("Database connected and tables created!")
-        
+        print("✅ Database connected and tables created!")
+
     async def create_tables(self):
         async with self.pool.acquire() as conn:
             await conn.execute('''
@@ -46,7 +44,7 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            
+
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS inventory (
                     id SERIAL PRIMARY KEY,
@@ -56,7 +54,7 @@ class Database:
                     UNIQUE(user_id, item_id)
                 )
             ''')
-            
+
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS trades (
                     id SERIAL PRIMARY KEY,
@@ -68,6 +66,34 @@ class Database:
                     receiver_coins INTEGER DEFAULT 0,
                     status TEXT DEFAULT 'pending',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS battle_stats (
+                    user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
+                    wins INTEGER DEFAULT 0,
+                    losses INTEGER DEFAULT 0,
+                    monsters_killed INTEGER DEFAULT 0,
+                    total_damage_dealt BIGINT DEFAULT 0
+                )
+            ''')
+
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS animals (
+                    id TEXT PRIMARY KEY,
+                    user_id BIGINT REFERENCES users(user_id),
+                    animal_id TEXT NOT NULL,
+                    nickname TEXT,
+                    level INTEGER DEFAULT 1,
+                    exp INTEGER DEFAULT 0,
+                    current_hp INTEGER,
+                    max_hp INTEGER,
+                    attack INTEGER,
+                    defense INTEGER,
+                    is_in_team BOOLEAN DEFAULT FALSE,
+                    team_slot INTEGER,
+                    captured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
