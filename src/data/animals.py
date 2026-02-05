@@ -178,7 +178,7 @@
         "defense": 70,
         "skill": {"name": "Extinction Wave", "type": "active", "effect": "Instantly defeats enemies below 30% HP"},
         "rarity": Rarity.SECRET
-    },
+    }
 }
 
 WILD_MONSTERS: Dict[str, Dict[str, Any]] = {
