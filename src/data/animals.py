@@ -1,4 +1,4 @@
- },
+},
     "dark_hydra": {
         "name": "Dark Hydra",
         "emoji_key": "dark_hydra",
