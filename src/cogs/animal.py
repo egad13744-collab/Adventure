@@ -42,16 +42,15 @@ class AnimalCog(commands.Cog):
         )
         
         animal_list = ""
-        for a in page_animals:
-            emoji = get_animal_emoji(a['animal_id'], a.get('costume'))
-            animal_data = get_animal_by_id(a['animal_id'])
-            rarity = animal_data['rarity'].display_name if animal_data else "Unknown"
-            rarity_code = animal_data['rarity'].short_code if animal_data else "?"
-            status = "⚔️ Tim" if a['is_in_team'] else "📦"
-            
-            animal_list += f"{emoji} **{a['nickname']}** | Lv.{a['level']} | {rarity} ({rarity_code}) | {status}\n"
-            animal_list += f"   🆔 `{a['id']}` | ❤️ {a['current_hp']}/{a['max_hp']} | ⚔️ {a['attack']} | 🛡️ {a['defense']}\n"
-        
+for a in page_animals:
+    emoji = get_animal_emoji(a['animal_id'], a.get('costume'))
+    animal_data = get_animal_by_id(a['animal_id'])
+    rarity = animal_data['rarity'].display_name if animal_data else "Unknown"
+    rarity_code = animal_data['rarity'].short_code if animal_data else "?"
+    status = "⚔️ Tim" if a['is_in_team'] else "📦"
+
+    # Ringkas, tapi ada kode hewan
+    animal_list += f"{emoji} **{a['nickname']}** | Lv.{a['level']} | {rarity} ({rarity_code}) | 🆔 `{a['id']}` | {status}\n"        
         embed.add_field(name="📋 Daftar Hewan", value=animal_list if animal_list else "Kosong", inline=False)
         
         max_team = await self.db.get_max_team_size(user_id)
