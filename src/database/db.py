@@ -10,7 +10,23 @@ class Database:
         self.pool: Optional[asyncpg.Pool] = None
         
     async def init(self):
-        self.pool = await asyncpg.create_pool(os.environ.get("DATABASE_URL"))
+    url = os.environ.get("DATABASE_URL")
+
+    if not url:
+        raise RuntimeError("❌ DATABASE_URL NOT SET — cek Railway Variables")
+
+    print("✅ DATABASE_URL detected")
+
+    self.pool = await asyncpg.create_pool(
+        url,
+        min_size=1,
+        max_size=5,
+        command_timeout=60,
+        ssl="require"
+    )
+
+    await self.create_tables()
+    print("✅ Database connected")
         await self.create_tables()
         print("Database connected and tables created!")
         
