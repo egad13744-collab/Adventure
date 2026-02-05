@@ -1,17 +1,22 @@
 import random
 from typing import Dict, Any
 from data.items import Rarity
-},
+
+ANIMALS: Dict[str, Dict[str, Any]] = {
     "dark_hydra": {
         "name": "Dark Hydra",
         "emoji_key": "dark_hydra",
         "hp": 90,
         "attack": 24,
         "defense": 18,
-        "skill": {"name": "Multi-Head Strike", "type": "active", "effect": "Attacks 2-3 times per turn"},
+        "skill": {
+            "name": "Multi-Head Strike",
+            "type": "active",
+            "effect": "Attacks 2-3 times per turn"
+        },
         "rarity": Rarity.EPIC
     },
-    "celestial_griffin": {
+   "celestial_griffin": {
         "name": "Celestial Griffin",
         "emoji_key": "celestial_griffin",
         "hp": 100,
