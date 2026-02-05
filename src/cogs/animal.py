@@ -50,7 +50,8 @@ for a in page_animals:
     status = "⚔️ Tim" if a['is_in_team'] else "📦"
 
     # Ringkas, tapi ada kode hewan
-    animal_list += f"{emoji} **{a['nickname']}** | Lv.{a['level']} | {rarity} ({rarity_code}) | 🆔 `{a['id']}` | {status}\n"        
+    animal_list += f"{emoji} **{a['nickname']}** | Lv.{a['level']} | {rarity} ({rarity_code}) | 🆔 `{a['id']}` | {status}\n" 
+       
         embed.add_field(name="📋 Daftar Hewan", value=animal_list if animal_list else "Kosong", inline=False)
         
         max_team = await self.db.get_max_team_size(user_id)
