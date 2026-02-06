@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from typing import Optional
 from data.items import get_item, SKINS, WEAPONS, FISHING_RODS
 
 class ProfileCog(commands.Cog):
@@ -12,12 +13,12 @@ class ProfileCog(commands.Cog):
         profile = await self.db.get_user(target.id, target.name)
         battle_stats = await self.db.get_battle_stats(target.id)
         
-        max_level = self.db.get_max_level(profile['prestige_level'])
+        max_level = self.db.get_max_level(profile.get('prestige_level', 0))
         exp_needed = self.db.exp_for_level(profile['level'])
         progress = int((profile['exp'] / exp_needed) * 10) if profile['level'] < max_level else 10
         progress_bar = "█" * progress + "░" * (10 - progress)
         
-        title_prefix = f"[{profile['active_title']}] " if profile['active_title'] else ""
+        title_prefix = f"[{profile.get('active_title')}] " if profile.get('active_title') else ""
         embed = discord.Embed(
             title=f"⚔️ {title_prefix}Profil {target.display_name}",
             color=discord.Color.blue()
@@ -25,11 +26,12 @@ class ProfileCog(commands.Cog):
         
         embed.set_thumbnail(url=target.display_avatar.url)
         
-        prestige_stars = "⭐" * profile['prestige_level']
+        prestige_level = profile.get('prestige_level', 0)
+        prestige_stars = "⭐" * prestige_level
         level_info = f"**Level:** {profile['level']}/{max_level}\n"
-        if profile['prestige_level'] > 0:
-            level_info += f"**Prestige:** {profile['prestige_level']} {prestige_stars}\n"
-            level_info += f"**XP Bonus:** +{int(self.db.get_xp_bonus(profile['prestige_level'])*100)}%\n"
+        if prestige_level > 0:
+            level_info += f"**Prestige:** {prestige_level} {prestige_stars}\n"
+            level_info += f"**XP Bonus:** +{int(self.db.get_xp_bonus(prestige_level)*100)}%\n"
             
         embed.add_field(
             name="📊 Stats",
@@ -86,16 +88,18 @@ class ProfileCog(commands.Cog):
         return embed
     
     @app_commands.command(name="profile", description="View your adventure profile")
-    async def profile(self, interaction: discord.Interaction, user: discord.User = None):
+    async def profile(self, interaction: discord.Interaction, user: Optional[discord.User] = None):
         target = user or interaction.user
         embed = await self.create_profile_embed(target)
-        await interaction.response.send_message(embed=embed)
+        if embed:
+            await interaction.response.send_message(embed=embed)
     
     @commands.command(name="profile")
-    async def profile_prefix(self, ctx, user: discord.User = None):
+    async def profile_prefix(self, ctx, user: Optional[discord.User] = None):
         target = user or ctx.author
         embed = await self.create_profile_embed(target)
-        await ctx.send(embed=embed)
+        if embed:
+            await ctx.send(embed=embed)
     
     async def do_equip(self, user_id: int, item_id: str):
         has_item = await self.db.has_item(user_id, item_id)
@@ -132,18 +136,18 @@ class ProfileCog(commands.Cog):
         embed, error = await self.do_equip(interaction.user.id, item_id)
         if error:
             await interaction.response.send_message(error, ephemeral=True)
-        else:
+        elif embed:
             await interaction.response.send_message(embed=embed)
     
     @commands.command(name="equip")
-    async def equip_prefix(self, ctx, item_id: str = None):
+    async def equip_prefix(self, ctx, item_id: Optional[str] = None):
         if not item_id:
             await ctx.send("❌ Penggunaan: `qequip <item_id>`")
             return
         embed, error = await self.do_equip(ctx.author.id, item_id)
         if error:
             await ctx.send(error)
-        else:
+        elif embed:
             await ctx.send(embed=embed)
     
     @app_commands.command(name="unequip", description="Unequip an item")
@@ -169,7 +173,7 @@ class ProfileCog(commands.Cog):
         )
     
     @commands.command(name="unequip")
-    async def unequip_prefix(self, ctx, slot: str = None):
+    async def unequip_prefix(self, ctx, slot: Optional[str] = None):
         if not slot or slot not in ["weapon", "rod", "skin"]:
             await ctx.send("❌ Penggunaan: `qunequip <weapon/rod/skin>`")
             return
