@@ -10,12 +10,23 @@ class Database:
         self.pool: Optional[asyncpg.Pool] = None
         
     async def init(self):
-        self.pool = await asyncpg.create_pool(os.environ.get("DATABASE_URL"))
-        await self.create_tables()
-        print("Database connected and tables created!")
-        
+        try:
+            self.pool = await asyncpg.create_pool(
+                os.environ.get("DATABASE_URL"),
+                min_size=1,
+                max_size=10,
+                max_inactive_connection_lifetime=300.0,
+                command_timeout=60.0
+            )
+            await self.create_tables()
+            print("Database connected and tables created!")
+        except Exception as e:
+            print(f"Failed to connect to database: {e}")
+            raise e
+            
     async def create_tables(self):
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id BIGINT PRIMARY KEY,
@@ -101,26 +112,37 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_animals_team ON animals(user_id, is_in_team)
             ''')
     
-    async def get_user(self, user_id: int, username: str = None) -> Dict[str, Any]:
-        async with self.pool.acquire() as conn:
+    async def get_pool(self) -> asyncpg.Pool:
+        if self.pool is None:
+            await self.init()
+        if self.pool is None:
+            raise Exception("Failed to initialize database pool")
+        return self.pool
+
+    async def get_user(self, user_id: int, username: Optional[str] = None) -> Dict[str, Any]:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             user = await conn.fetchrow(
                 'SELECT * FROM users WHERE user_id = $1', user_id
             )
             
             if not user:
+                # Ensure battle_stats is created first due to foreign key
                 await conn.execute('''
                     INSERT INTO users (user_id, username) VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO NOTHING
                 ''', user_id, username or "Unknown")
                 
                 await conn.execute('''
                     INSERT INTO battle_stats (user_id) VALUES ($1)
+                    ON CONFLICT (user_id) DO NOTHING
                 ''', user_id)
                 
                 user = await conn.fetchrow(
                     'SELECT * FROM users WHERE user_id = $1', user_id
                 )
             
-            return dict(user)
+            return dict(user) if user is not None else {}
     
     async def update_user(self, user_id: int, **kwargs):
         if not kwargs:
@@ -129,26 +151,31 @@ class Database:
         set_clause = ', '.join(f'{k} = ${i+2}' for i, k in enumerate(kwargs.keys()))
         values = list(kwargs.values())
         
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute(
                 f'UPDATE users SET {set_clause} WHERE user_id = $1',
                 user_id, *values
             )
     
     async def add_exp(self, user_id: int, amount: int) -> Dict[str, Any]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             user = await conn.fetchrow(
                 'SELECT level, exp, prestige_level FROM users WHERE user_id = $1', user_id
             )
             
-            xp_bonus = self.get_xp_bonus(user['prestige_level'])
+            if not user:
+                return {"leveled_up": False}
+
+            xp_bonus = self.get_xp_bonus(user.get('prestige_level', 0))
             final_amount = int(amount * (1 + xp_bonus))
             
             new_exp = user['exp'] + final_amount
             level = user['level']
             leveled_up = False
             
-            max_level = self.get_max_level(user['prestige_level'])
+            max_level = self.get_max_level(user.get('prestige_level', 0))
             
             exp_needed = self.exp_for_level(level)
             while new_exp >= exp_needed and level < max_level:
@@ -180,14 +207,16 @@ class Database:
         return 50 + (level * 30)
     
     async def add_coins(self, user_id: int, amount: int):
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute(
                 'UPDATE users SET coins = coins + $1 WHERE user_id = $2',
                 amount, user_id
             )
     
     async def get_inventory(self, user_id: int) -> List[Dict[str, Any]]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             items = await conn.fetch(
                 'SELECT item_id, quantity FROM inventory WHERE user_id = $1',
                 user_id
@@ -195,7 +224,8 @@ class Database:
             return [dict(item) for item in items]
     
     async def add_item(self, user_id: int, item_id: str, quantity: int = 1):
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute('''
                 INSERT INTO inventory (user_id, item_id, quantity)
                 VALUES ($1, $2, $3)
@@ -204,7 +234,8 @@ class Database:
             ''', user_id, item_id, quantity)
     
     async def remove_item(self, user_id: int, item_id: str, quantity: int = 1) -> bool:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             item = await conn.fetchrow(
                 'SELECT quantity FROM inventory WHERE user_id = $1 AND item_id = $2',
                 user_id, item_id
@@ -227,15 +258,17 @@ class Database:
             return True
     
     async def has_item(self, user_id: int, item_id: str, quantity: int = 1) -> bool:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             item = await conn.fetchrow(
                 'SELECT quantity FROM inventory WHERE user_id = $1 AND item_id = $2',
                 user_id, item_id
             )
-            return item and item['quantity'] >= quantity
+            return item is not None and item['quantity'] >= quantity
     
     async def get_battle_stats(self, user_id: int) -> Dict[str, Any]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             stats = await conn.fetchrow(
                 'SELECT * FROM battle_stats WHERE user_id = $1', user_id
             )
@@ -250,14 +283,16 @@ class Database:
             set_parts.append(f'{k} = {k} + ${i+2}')
             values.append(v)
         
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute(
                 f'UPDATE battle_stats SET {", ".join(set_parts)} WHERE user_id = $1',
                 user_id, *values
             )
     
     async def check_cooldown(self, user_id: int, cooldown_type: str, seconds: int) -> Optional[int]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             user = await conn.fetchrow(
                 f'SELECT {cooldown_type} FROM users WHERE user_id = $1', user_id
             )
@@ -270,7 +305,8 @@ class Database:
             return None
     
     async def set_cooldown(self, user_id: int, cooldown_type: str):
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute(
                 f'UPDATE users SET {cooldown_type} = $1 WHERE user_id = $2',
                 datetime.utcnow(), user_id
@@ -278,7 +314,8 @@ class Database:
     
     async def add_animal(self, user_id: int, animal_data: Dict[str, Any]) -> str:
         animal_uuid = str(uuid.uuid4())[:8]
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute('''
                 INSERT INTO animals (id, user_id, animal_id, nickname, level, exp, current_hp, max_hp, attack, defense)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
@@ -297,7 +334,8 @@ class Database:
         return animal_uuid
     
     async def get_user_animals(self, user_id: int) -> List[Dict[str, Any]]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             animals = await conn.fetch(
                 'SELECT * FROM animals WHERE user_id = $1 ORDER BY captured_at DESC',
                 user_id
@@ -305,7 +343,8 @@ class Database:
             return [dict(a) for a in animals]
     
     async def get_animal(self, animal_uuid: str) -> Optional[Dict[str, Any]]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             animal = await conn.fetchrow(
                 'SELECT * FROM animals WHERE id = $1',
                 animal_uuid
@@ -313,7 +352,8 @@ class Database:
             return dict(animal) if animal else None
     
     async def get_animal_team(self, user_id: int) -> List[Dict[str, Any]]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             animals = await conn.fetch(
                 '''SELECT * FROM animals 
                    WHERE user_id = $1 AND is_in_team = TRUE 
@@ -323,7 +363,8 @@ class Database:
             return [dict(a) for a in animals]
     
     async def add_animal_to_team(self, user_id: int, animal_uuid: str) -> bool:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             animal = await conn.fetchrow(
                 'SELECT * FROM animals WHERE id = $1 AND user_id = $2',
                 animal_uuid, user_id
@@ -353,7 +394,8 @@ class Database:
             return True
     
     async def remove_animal_from_team(self, user_id: int, animal_uuid: str) -> bool:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             animal = await conn.fetchrow(
                 'SELECT * FROM animals WHERE id = $1 AND user_id = $2',
                 animal_uuid, user_id
@@ -369,7 +411,8 @@ class Database:
             return True
     
     async def add_animal_exp(self, animal_uuid: str, amount: int) -> Dict[str, Any]:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             animal = await conn.fetchrow(
                 'SELECT level, exp, max_hp, attack, defense FROM animals WHERE id = $1',
                 animal_uuid
@@ -409,21 +452,24 @@ class Database:
             return {"leveled_up": leveled_up, "new_level": level, "exp": new_exp}
     
     async def heal_animal(self, animal_uuid: str):
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute(
                 'UPDATE animals SET current_hp = max_hp WHERE id = $1',
                 animal_uuid
             )
     
     async def heal_team(self, user_id: int):
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute(
                 'UPDATE animals SET current_hp = max_hp WHERE user_id = $1 AND is_in_team = TRUE',
                 user_id
             )
     
     async def update_animal_hp(self, animal_uuid: str, new_hp: int):
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             await conn.execute(
                 'UPDATE animals SET current_hp = $1 WHERE id = $2',
                 max(0, new_hp), animal_uuid
@@ -434,7 +480,8 @@ class Database:
         return min(3, 1 + user['level'] // 5)
     
     async def delete_animal(self, animal_uuid: str) -> bool:
-        async with self.pool.acquire() as conn:
+        pool = await self.get_pool()
+        async with pool.acquire() as conn:
             result = await conn.execute(
                 'DELETE FROM animals WHERE id = $1',
                 animal_uuid
