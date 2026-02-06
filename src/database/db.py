@@ -8,21 +8,12 @@ import uuid
 class Database:
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None
-
+        
     async def init(self):
-        url = os.environ.get("DATABASE_URL")
-
-        if not url:
-            raise RuntimeError("❌ DATABASE_URL NOT SET — cek Railway Variables")
-
-        print("✅ DATABASE_URL detected")
-
-        self.pool = await asyncpg.create_pool(url)
-
-        # Panggil pembuatan tabel
+        self.pool = await asyncpg.create_pool(os.environ.get("DATABASE_URL"))
         await self.create_tables()
-        print("✅ Database connected and tables created!")
-
+        print("Database connected and tables created!")
+        
     async def create_tables(self):
         async with self.pool.acquire() as conn:
             await conn.execute('''
@@ -41,10 +32,15 @@ class Database:
                     equipped_weapon TEXT,
                     equipped_rod TEXT,
                     equipped_skin TEXT,
+                    prestige_level INTEGER DEFAULT 0,
+                    prestige_points INTEGER DEFAULT 0,
+                    active_title TEXT,
+                    unlocked_titles TEXT[] DEFAULT '{}',
+                    unlocked_badges JSONB DEFAULT '{}',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-
+            
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS inventory (
                     id SERIAL PRIMARY KEY,
@@ -54,7 +50,7 @@ class Database:
                     UNIQUE(user_id, item_id)
                 )
             ''')
-
+            
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS trades (
                     id SERIAL PRIMARY KEY,
@@ -68,7 +64,7 @@ class Database:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-
+            
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS battle_stats (
                     user_id BIGINT PRIMARY KEY REFERENCES users(user_id),
@@ -78,7 +74,7 @@ class Database:
                     total_damage_dealt BIGINT DEFAULT 0
                 )
             ''')
-
+            
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS animals (
                     id TEXT PRIMARY KEY,
@@ -142,29 +138,43 @@ class Database:
     async def add_exp(self, user_id: int, amount: int) -> Dict[str, Any]:
         async with self.pool.acquire() as conn:
             user = await conn.fetchrow(
-                'SELECT level, exp FROM users WHERE user_id = $1', user_id
+                'SELECT level, exp, prestige_level FROM users WHERE user_id = $1', user_id
             )
             
-            new_exp = user['exp'] + amount
+            xp_bonus = self.get_xp_bonus(user['prestige_level'])
+            final_amount = int(amount * (1 + xp_bonus))
+            
+            new_exp = user['exp'] + final_amount
             level = user['level']
             leveled_up = False
             
+            max_level = self.get_max_level(user['prestige_level'])
+            
             exp_needed = self.exp_for_level(level)
-            while new_exp >= exp_needed:
+            while new_exp >= exp_needed and level < max_level:
                 new_exp -= exp_needed
                 level += 1
                 leveled_up = True
-                exp_needed = self.exp_for_level(level)
+                if level < max_level:
+                    exp_needed = self.exp_for_level(level)
+                else:
+                    break
             
             await conn.execute(
                 'UPDATE users SET exp = $1, level = $2 WHERE user_id = $3',
                 new_exp, level, user_id
             )
             
-            return {"leveled_up": leveled_up, "new_level": level, "exp": new_exp}
+            return {"leveled_up": leveled_up, "new_level": level, "exp": new_exp, "max_reached": level >= max_level}
     
     def exp_for_level(self, level: int) -> int:
         return 100 + (level * 50)
+    
+    def get_max_level(self, prestige_level: int) -> int:
+        return 100 + (prestige_level * 50)
+
+    def get_xp_bonus(self, prestige_level: int) -> float:
+        return min(0.15, prestige_level * 0.05)
     
     def animal_exp_for_level(self, level: int) -> int:
         return 50 + (level * 30)
@@ -292,7 +302,7 @@ class Database:
                 'SELECT * FROM animals WHERE user_id = $1 ORDER BY captured_at DESC',
                 user_id
             )
-     [dict(a) for a in animals]
+            return [dict(a) for a in animals]
     
     async def get_animal(self, animal_uuid: str) -> Optional[Dict[str, Any]]:
         async with self.pool.acquire() as conn:
