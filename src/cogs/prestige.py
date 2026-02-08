@@ -36,7 +36,7 @@ class PrestigeCog(commands.Cog):
         
         return f"✨ **CONGRATULATIONS!** ✨\nKamu telah mencapai Prestige Level **{new_prestige}**!\nLevelmu telah direset ke 1, tapi kamu mendapatkan bonus EXP permanen!"
 
-    @app_commands.command(name="prestige", description="Reset your level for permanent bonuses!")
+    @app_commands.command(name="prestige_reset", description="Reset your level for permanent bonuses!")
     async def prestige_slash(self, interaction: discord.Interaction):
         message = await self.do_prestige(interaction.user.id, interaction.user.name)
         await interaction.response.send_message(message)
