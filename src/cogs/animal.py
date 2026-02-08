@@ -94,7 +94,7 @@ class AnimalCog(commands.Cog):
             if total_pages > 1:
                 view = AnimalListView(self, ctx.author.id, ctx.author.display_name, current_page, total_pages)
                 await ctx.send(embed=embed, view=view)
-            else:
+            elif embed:
                 await ctx.send(embed=embed)
 
         elif subcommand.lower() == "equip" and arg:
@@ -353,4 +353,4 @@ class AnimalListView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 async def setup(bot):
-    await bot.add_cog(AnimalCog(bot))
+    await bot.add_cog(AnimalCog(bot)) ga 
