@@ -28,6 +28,7 @@ class AdventureBot(commands.Bot):
             'cogs.trade',
             'cogs.animal',
             'cogs.leaderboard',
+            'cogs.prestige',
         ]
         
         for cog in cogs:
