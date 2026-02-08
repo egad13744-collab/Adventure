@@ -70,6 +70,18 @@ class AnimalCog(commands.Cog):
         return embed, page, total_pages
 
 
+    @animal_group.command(name="list", description="View your animal collection")
+    @app_commands.describe(page="The page number to view")
+    async def animal_list_slash(self, interaction: discord.Interaction, page: int = 1):
+        embed, current_page, total_pages = await self.do_animal_list(
+            interaction.user.id, interaction.user.display_name, page
+        )
+        if total_pages > 1:
+            view = AnimalListView(self, interaction.user.id, interaction.user.display_name, current_page, total_pages)
+            await interaction.response.send_message(embed=embed, view=view)
+        else:
+            await interaction.response.send_message(embed=embed)
+
     @commands.command(name="animal")
     async def animal_prefix(self, ctx, subcommand: str = "list", arg: str = None):
         if subcommand.lower() == "list":
