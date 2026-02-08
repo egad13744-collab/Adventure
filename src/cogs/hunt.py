@@ -110,7 +110,7 @@ class HuntCog(commands.Cog):
         embed, error = await self.do_hunt(interaction.user.id, interaction.user.name)  
         if error:  
             await interaction.response.send_message(error, ephemeral=True)  
-        else:  
+        elif embed:  
             await interaction.response.send_message(embed=embed)  
 
     @commands.command(name="hunt")  
